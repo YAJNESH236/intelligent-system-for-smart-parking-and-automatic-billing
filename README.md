@@ -74,6 +74,234 @@ Automated Payments: When a vehicle exits, the system automatically charges the u
 
 Alerts and Notifications: Send digital receipts or notifications to users confirming payment and summarizing parking details.
 
+CODE:
+#include <Servo.h>
+
+#include <LiquidCrystal.h>
+
+#include <SPI.h>
+#include <MFRC522.h>
+
+#define RST_PIN         9           // Configurable, see typical pin layout above
+#define SS_PIN          10    
+#include<SoftwareSerial.h>
+SoftwareSerial SUART(0, 1); //SRX = DPin-2; STX = DPin-3
+
+      // Configurable, see typical pin layout above
+
+MFRC522 mfrc522(SS_PIN, RST_PIN); 
+// Pin configuration for the LCD
+const int rs = 8;
+const int en = 7;
+const int d4 = 5;
+const int d5 = 4;
+const int d6 = 3;
+const int d7 = 2;
+
+// Pin configuration for IR sensors
+const int irSensorPin1 = A0;
+const int irSensorPin2 = A1;
+const int irSensorPin3 = A2;
+const int irSensorPin4 = A3;
+const int irSensorPin5 = A4;
+Servo servoMotor;
+const int servoPin=6;
+// Create an LCD object
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+// Parking variables
+int totalSpaces = 4;
+int availableSpaces = 4;
+
+void setup() {
+  // Set up the LCD columns and rows
+  lcd.begin(20, 4);
+  Serial.begin(9600);
+  SUART.begin(9600);
+
+  SPI.begin();                                                  // Init SPI bus
+  mfrc522.PCD_Init();                                              // Init MFRC522 card
+  Serial.println(F("Read personal data on a MIFARE PICC:"));
+  // Simulate initialization of parking system
+  lcd.print("Smart Parking");
+  delay(2000);
+  lcd.clear();
+  servoMotor.attach(servoPin);
+}
+
+void loop(){
+ // Simulate updating parking status
+   MFRC522::MIFARE_Key key;
+  for (byte i = 0; i < 6; i++) key.keyByte[i] = 0xFF;
+
+  //some variables we need
+  byte block;
+  byte len;
+  MFRC522::StatusCode status;
+
+  //-------------------------------------------
+
+  // Reset the loop if no new card present on the sensor/reader. This saves the entire process when idle.
+  if ( ! mfrc522.PICC_IsNewCardPresent()) {
+    return;
+  }
+
+  // Select one of the cards
+  if ( ! mfrc522.PICC_ReadCardSerial()) {
+    return;
+  }
+
+  Serial.println(F("**Card Detected:**"));
+
+  //-------------------------------------------
+
+  mfrc522.PICC_DumpDetailsToSerial(&(mfrc522.uid)); //dump some details about the card
+
+  //mfrc522.PICC_DumpToSerial(&(mfrc522.uid));      //uncomment this to see all blocks in hex
+
+ 
+ char myMsg[] = "141-142 Love Road";
+ //-------------------------------------------
+Serial.println(myMsg); 
+SUART.println(myMsg); 
+  Serial.print(F("Name: "));
+
+  byte buffer1[18];
+
+  block = 4;
+  len = 18;
+
+  //------------------------------------------- GET FIRST NAME
+  status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, 4, &key, &(mfrc522.uid)); //line 834 of MFRC522.cpp file
+  if (status != MFRC522::STATUS_OK) {
+    Serial.print(F("Authentication failed: "));
+    Serial.println(mfrc522.GetStatusCodeName(status));
+    return;
+  }
+
+  status = mfrc522.MIFARE_Read(block, buffer1, &len);
+  if (status != MFRC522::STATUS_OK) {
+    Serial.print(F("Reading failed: "));
+    Serial.println(mfrc522.GetStatusCodeName(status));
+    return;
+  }
+
+  //PRINT FIRST NAME
+  for (uint8_t i = 0; i < 16; i++)
+  {
+    if (buffer1[i] != 32)
+    {
+      Serial.write(buffer1[i]);
+    }
+  }
+  Serial.print(" ");
+
+  //---------------------------------------- GET LAST NAME
+
+  byte buffer2[18];
+  block = 1;
+
+  status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, 1, &key, &(mfrc522.uid)); //line 834
+  if (status != MFRC522::STATUS_OK) {
+    Serial.print(F("Authentication failed: "));
+    Serial.println(mfrc522.GetStatusCodeName(status));
+    return;
+  }
+
+  status = mfrc522.MIFARE_Read(block, buffer2, &len);
+  if (status != MFRC522::STATUS_OK) {
+    Serial.print(F("Reading failed: "));
+    Serial.println(mfrc522.GetStatusCodeName(status));
+    return;
+  }
+
+  //PRINT LAST NAME
+  for (uint8_t i = 0; i < 16; i++) {
+    Serial.write(buffer2[i] );
+  }
+
+
+  //----------------------------------------
+
+  Serial.println(F("\n*End Reading*\n"));
+
+  delay(1000); //change value if you want to read cards faster
+
+  mfrc522.PICC_HaltA();
+  mfrc522.PCD_StopCrypto1();
+
+  updateParkingStatus();
+
+  // Display parking status on the LCD
+  displayParkingStatus();
+
+  // Your main code for real-time updates can go here
+
+  delay(1000);  // Update every 1seconds
+
+}
+
+
+
+void updateParkingStatus() {
+  // Read IR sensor inputs
+  int irSensorValue1 = digitalRead(irSensorPin1);
+  int irSensorValue2 = digitalRead(irSensorPin2);
+  int irSensorValue3 = digitalRead(irSensorPin3);
+  int irSensorValue4 = digitalRead(irSensorPin4);
+int irSensorValue5= digitalRead(irSensorPin5);
+if(irSensorValue5==HIGH)
+{
+  servoMotor.write(90);
+}
+else
+{ 
+  servoMotor.write(0);
+}
+
+
+  // Adjust available spaces based on IR sensor inputs
+  availableSpaces = totalSpaces;
+  if (irSensorValue1 == LOW) {
+    availableSpaces--;
+  }
+  if (irSensorValue2 == LOW) {
+    availableSpaces--;
+  }
+  if (irSensorValue3 == LOW) {
+    availableSpaces--;
+  }
+  if (irSensorValue4 == LOW) {
+    availableSpaces--;
+  }
+
+  // Ensure available spaces do not go below 0
+  availableSpaces = constrain(availableSpaces, 0, totalSpaces);
+}
+
+void displayParkingStatus() {
+  lcd.clear();
+
+  for (int i = 0; i < totalSpaces; ++i) {
+    lcd.setCursor(0, i );
+    lcd.print("Space ");
+    lcd.print(i + 1);
+    lcd.print(": ");
+
+    if (i < availableSpaces) {
+      lcd.print("Available");
+    } else {
+      lcd.print("Occupied");
+}
+}
+}
+
+RESULT:
+
+As a conclusion, this project will help in reducing the amount of time a driver has to spend around the parking just to find an available spot, reducing the amount of traffic around the parking and also reducing the bad parking around the parking space.Adopting parking management system significantly reduces the amount of time consumed in seeking the parking space, renders valuable data upon the availability of the parking area, accurate mapping of the parking space, offers guidance and suggestion for proper vehicle
+
+![WhatsApp Image 2023-11-25 at 17 46 27_0e5d9f3a](https://github.com/YAJNESH236/intelligent-system-for-smart-parking-and-automatic-billing/assets/149752107/3ac4949e-1d16-4168-ba62-a9ab6900886c)
+
 
 
 
